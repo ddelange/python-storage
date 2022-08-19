@@ -163,10 +163,18 @@ class LifecycleRuleConditions(dict):
                     rule action to versioned items with at least one newer
                     version.
 
+    :type matches_prefix: list(str)
+    :param matches_prefix: (Optional) Apply rule action to items which
+                                  any prefix matches the beginning of the item name.
+
     :type matches_storage_class: list(str), one or more of
                                  :attr:`Bucket.STORAGE_CLASSES`.
-    :param matches_storage_class: (Optional) Apply rule action to items which
+    :param matches_storage_class: (Optional) Apply rule action to items
                                   whose storage class matches this value.
+
+    :type matches_suffix: list(str)
+    :param matches_suffix: (Optional) Apply rule action to items which
+                                  any suffix matches the end of the item name.
 
     :type number_of_newer_versions: int
     :param number_of_newer_versions: (Optional) Apply rule action to versioned
@@ -211,6 +219,8 @@ class LifecycleRuleConditions(dict):
         custom_time_before=None,
         days_since_noncurrent_time=None,
         noncurrent_time_before=None,
+        matches_prefix=None,
+        matches_suffix=None,
         _factory=False,
     ):
         conditions = {}
@@ -236,14 +246,20 @@ class LifecycleRuleConditions(dict):
         if custom_time_before is not None:
             conditions["customTimeBefore"] = custom_time_before.isoformat()
 
-        if not _factory and not conditions:
-            raise ValueError("Supply at least one condition")
-
         if days_since_noncurrent_time is not None:
             conditions["daysSinceNoncurrentTime"] = days_since_noncurrent_time
 
         if noncurrent_time_before is not None:
             conditions["noncurrentTimeBefore"] = noncurrent_time_before.isoformat()
+
+        if matches_prefix is not None:
+            conditions["matchesPrefix"] = matches_prefix
+
+        if matches_suffix is not None:
+            conditions["matchesSuffix"] = matches_suffix
+
+        if not _factory and not conditions:
+            raise ValueError("Supply at least one condition")
 
         super(LifecycleRuleConditions, self).__init__(conditions)
 
@@ -279,9 +295,19 @@ class LifecycleRuleConditions(dict):
         return self.get("isLive")
 
     @property
+    def matches_prefix(self):
+        """Conditon's 'matches_prefix' value."""
+        return self.get("matchesPrefix")
+
+    @property
     def matches_storage_class(self):
         """Conditon's 'matches_storage_class' value."""
         return self.get("matchesStorageClass")
+
+    @property
+    def matches_suffix(self):
+        """Conditon's 'matches_suffix' value."""
+        return self.get("matchesSuffix")
 
     @property
     def number_of_newer_versions(self):
@@ -2247,12 +2273,12 @@ class Bucket(_PropertyMixin):
 
         .. note::
 
-           The getter for this property returns a list which contains
+           The getter for this property returns a generator which yields
            *copies* of the bucket's lifecycle rules mappings.  Mutating the
-           list or one of its dicts has no effect unless you then re-assign
-           the dict via the setter.  E.g.:
+           output dicts has no effect unless you then re-assign the dict via
+           the setter.  E.g.:
 
-           >>> rules = bucket.lifecycle_rules
+           >>> rules = list(bucket.lifecycle_rules)
            >>> rules.append({'origin': '/foo', ...})
            >>> rules[1]['rule']['action']['type'] = 'Delete'
            >>> del rules[0]
@@ -2393,12 +2419,26 @@ class Bucket(_PropertyMixin):
         self._location = value
 
     @property
+    def data_locations(self):
+        """Retrieve the list of regional locations for custom dual-region buckets.
+
+        See https://cloud.google.com/storage/docs/json_api/v1/buckets and
+        https://cloud.google.com/storage/docs/locations
+
+        Returns ``None`` if the property has not been set before creation,
+        if the bucket's resource has not been loaded from the server,
+        or if the bucket is not a dual-regions bucket.
+        :rtype: list of str or ``NoneType``
+        """
+        custom_placement_config = self._properties.get("customPlacementConfig", {})
+        return custom_placement_config.get("dataLocations")
+
+    @property
     def location_type(self):
-        """Retrieve or set the location type for the bucket.
+        """Retrieve the location type for the bucket.
 
         See https://cloud.google.com/storage/docs/storage-classes
 
-        :setter: Set the location type for this bucket.
         :getter: Gets the the location type for this bucket.
 
         :rtype: str or ``NoneType``
